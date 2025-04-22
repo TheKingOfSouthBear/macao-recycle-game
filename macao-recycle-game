@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-MO">
+<head>
+    <meta charset="UTF-8">
+    <title>澳門環保達人挑戰賽</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --glass: #3498db;
+            --plastic: #2ecc71;
+            --paper: #f1c40f;
+            --hazard: #e74c3c;
+            --organic: #e67e22;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            font-family: 'Microsoft JhengHei', sans-serif;
+            text-align: center;
+        }
+
+        #score-display {
+            font-size: 28px;
+            margin: 15px 0;
+            color: #f1c40f;
+        }
+
+        #timer {
+            font-size: 40px;
+            color: #ff7675;
+            margin: 10px 0;
+        }
+
+        .trash-item {
+            width: 200px;
+            height: 200px;
+            margin: 20px auto;
+            border: 3px solid #fff;
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .bins-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .bin {
+            padding: 20px;
+            border: 2px solid;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .bin:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px currentColor;
+        }
+
+        .feedback {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 72px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 100;
+            animation: zoom 0.5s;
+        }
+
+        @keyframes zoom {
+            0% { transform: translate(-50%, -50%) scale(0.5); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        #start-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+        }
+
+        #start-btn {
+            padding: 15px 30px;
+            font-size: 24px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #start-btn:hover {
+            background: #ff7675;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        <h1>澳門環保達人挑戰賽</h1>
+        <p>在15秒內正確分類垃圾，挑戰最高分！</p >
+        <button id="start-btn">開始遊戲</button>
+    </div>
+
+    <div id="game-container" style="display:none;">
+        <div id="score-display">得分: <span id="score">0</span></div>
+        <div id="timer">15</div>
+        
+        <div class="trash-item">
+            <i class="fas fa-trash-alt"></i>
+            <div id="trash-name">準備開始...</div>
+        </div>
+        
+        <div class="bins-grid">
+            <div class="bin" data-type="glass" style="border-color:var(--glass);color:var(--glass)">
+                <i class="fas fa-wine-bottle"></i>
+                <div>玻璃回收</div>
+            </div>
+            <div class="bin" data-type="plastic" style="border-color:var(--plastic);color:var(--plastic)">
+                <i class="fas fa-recycle"></i>
+                <div>塑膠回收</div>
+            </div>
+            <div class="bin" data-type="paper" style="border-color:var(--paper);color:var(--paper)">
+                <i class="fas fa-newspaper"></i>
+                <div>紙類回收</div>
+            </div>
+            <div class="bin" data-type="hazard" style="border-color:var(--hazard);color:var(--hazard)">
+                <i class="fas fa-skull-crossbones"></i>
+                <div>有害垃圾</div>
+            </div>
+            <div class="bin" data-type="organic" style="border-color:var(--organic);color:var(--organic)">
+                <i class="fas fa-apple-alt"></i>
+                <div>廚餘垃圾</div>
+            </div>
+        </div>
+
+        <div class="feedback" id="feedback"></div>
+    </div>
+
+    <!-- 音效 -->
+    <audio id="correct-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3"></audio>
+    <audio id="wrong-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"></audio>
+
+<script>
+// 游戏数据
+const GAME_DATA = {
+    score: 0,
+    timeLeft: 15,
+    currentTrash: null,
+    timerId: null,
+    questions: [
+        { name: '啤酒瓶', type: 'glass', icon: 'fa-beer' },
+        { name: '玻璃杯', type: 'glass', icon: 'fa-glass-whiskey' },
+        { name: '保鮮盒', type: 'plastic', icon: 'fa-box-open' },
+        { name: '塑膠瓶', type: 'plastic', icon: 'fa-bottle-water' },
+        { name: '報紙', type: 'paper', icon: 'fa-newspaper' },
+        { name: '紙箱', type: 'paper', icon: 'fa-box' },
+        { name: '水銀溫度計', type: 'hazard', icon: 'fa-thermometer' },
+        { name: '鋰電池', type: 'hazard', icon: 'fa-battery-full' },
+        { name: '香蕉皮', type: 'organic', icon: 'fa-banana' },
+        { name: '蛋殼', type: 'organic', icon: 'fa-egg' }
+    ]
+};
+
+// 启动游戏
+document.getElementById('start-btn').addEventListener('click', function() {
+    // 隐藏开始界面
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    
+    // 重置游戏状态
+    GAME_DATA.score = 0;
+    GAME_DATA.timeLeft = 15;
+    updateScore();
+    document.getElementById('timer').textContent = '15';
+    
+    // 显示第一个垃圾
+    showRandomTrash();
+    
+    // 开始倒计时
+    startTimer();
+});
+
+// 显示随机垃圾
+function showRandomTrash() {
+    const randomIndex = Math.floor(Math.random() * GAME_DATA.questions.length);
+    GAME_DATA.currentTrash = GAME_DATA.questions[randomIndex];
+    
+    document.querySelector('.trash-item i').className = 'fas ' + GAME_DATA.currentTrash.icon;
+    document.getElementById('trash-name').textContent = GAME_DATA.currentTrash.name;
+}
+
+// 开始倒计时
+function startTimer() {
+    clearInterval(GAME_DATA.timerId); // 清除旧计时器
+    
+    GAME_DATA.timerId = setInterval(function() {
+        GAME_DATA.timeLeft--;
+        document.getElementById('timer').textContent = GAME_DATA.timeLeft;
+        
+        // 最后3秒变红色
+        if (GAME_DATA.timeLeft <= 3) {
+            document.getElementById('timer').style.color = '#ff0000';
+        }
+        
+        // 时间结束
+        if (GAME_DATA.timeLeft <= 0) {
+            clearInterval(GAME_DATA.timerId);
+            setTimeout(function() {
+                alert('遊戲結束！你的得分是: ' + GAME_DATA.score);
+                location.reload(); // 重新加载页面
+            }, 500);
+        }
+    }, 1000);
+}
+
+// 更新分数显示
+function updateScore() {
+    document.getElementById('score').textContent = GAME_DATA.score;
+}
+
+// 显示反馈
+function showFeedback(isCorrect) {
+    const feedback = document.getElementById('feedback');
+    feedback.textContent = isCorrect ? '✓ 答對了！' : '✗ 答錯了';
+    feedback.style.color = isCorrect ? '#2ecc71' : '#e74c3c';
+    feedback.style.display = 'block';
+    
+    // 播放音效
+    const sound = isCorrect ? 'correct-sound' : 'wrong-sound';
+    document.getElementById(sound).currentTime = 0;
+    document.getElementById(sound).play();
+    
+    // 1秒后隐藏反馈
+    setTimeout(function() {
+        feedback.style.display = 'none';
+    }, 1000);
+}
+
+// 绑定垃圾桶点击事件
+document.querySelectorAll('.bin').forEach(function(bin) {
+    bin.addEventListener('click', function() {
+        if (GAME_DATA.timeLeft <= 0) return; // 游戏结束不再响应
+        
+        const selectedType = this.getAttribute('data-type');
+        const isCorrect = selectedType === GAME_DATA.currentTrash.type;
+        
+        // 更新分数
+        GAME_DATA.score += isCorrect ? 10 : -5;
+        updateScore();
+        
+        // 显示反馈
+        showFeedback(isCorrect);
+        
+        // 显示新垃圾
+        showRandomTrash();
+    });
+});
+</script>
+</body>
+</html>
